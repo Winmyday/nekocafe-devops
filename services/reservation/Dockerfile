@@ -6,7 +6,8 @@
 FROM python:3.12-slim AS build
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (pinned in requirements.txt; apt versions pinned per Debian stable)
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libpq-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -18,6 +19,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ===== Stage 2: Test =====
 FROM build AS test
 COPY . .
+# hadolint ignore=DL3013
 RUN pip install --no-cache-dir pytest pytest-cov && \
     python -m pytest tests/ --cov=src --cov-report=xml --cov-report=term
 
