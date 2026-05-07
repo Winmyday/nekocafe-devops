@@ -75,7 +75,7 @@ app.post('/api/v1/auth/register', (req, res) => {
 });
 
 app.post('/api/v1/auth/login', (req, res) => {
-  const { phone, code } = req.body;
+  const { phone } = req.body;
   const userEntry = Object.values(users).find(u => u.phone === maskPhone(phone));
 
   if (!userEntry) {
