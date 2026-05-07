@@ -1,0 +1,131 @@
+name: CD
+# NekoCafe CD流水线 - 金丝雀发布 + 自动回滚
+# 班级：计算机233  姓名：刘俞靖  学号：231002501
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_RESERVATION: ${{ github.repository }}/reservation
+  IMAGE_NAME_MEMBER: ${{ github.repository }}/member
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > ~/.kube/config
+
+      - name: Helm Deploy to Staging
+        run: |
+          helm upgrade --install nekocafe ./helm/ \
+            -f helm/values-staging.yaml \
+            --set image.tag=${{ github.sha }} \
+            --namespace staging \
+            --create-namespace \
+            --wait \
+            --timeout 5m
+
+      - name: E2E Smoke Test
+        run: |
+          curl -s https://staging-api.nekocafe.com/healthz | grep ok
+          # Create test reservation
+          curl -s -X POST https://staging-api.nekocafe.com/v1/reservations \
+            -H "Content-Type: application/json" \
+            -d '{"store_id":"S001","table_id":"T001","date":"2026-05-08","slot_id":"lunch","guest_count":2}'
+
+  canary-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.nekocafe.com
+    needs: deploy-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > ~/.kube/config
+
+      - name: Canary 5% - Deploy canary pods
+        run: |
+          helm upgrade --install nekocafe-canary ./helm/ \
+            -f helm/values-prod.yaml \
+            --set image.tag=${{ github.sha }} \
+            --set canary.enabled=true \
+            --set canary.weight=5 \
+            --namespace production \
+            --wait
+
+      - name: Canary 5% - Monitor metrics (5 min)
+        run: |
+          echo "Waiting 5 minutes to observe canary metrics..."
+          sleep 300
+          # Check error rate
+          ERROR_RATE=$(curl -s "${{ secrets.GRAFANA_URL }}/api/ds/query" \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_TOKEN }}" \
+            -d '{"queries":[{"expr":"rate(http_requests_total{version=\"canary\",status_code=~\"5..\"}[2m])/rate(http_requests_total{version=\"canary\"}[2m])"}]}' | jq '.results[0].value[1]')
+          if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
+            echo "ERROR: Canary error rate $ERROR_RATE exceeds 1% threshold"
+            exit 1
+          fi
+          echo "Canary 5% healthy: error_rate=$ERROR_RATE"
+
+      - name: Canary 25% - Increase traffic
+        run: |
+          helm upgrade --install nekocafe-canary ./helm/ \
+            -f helm/values-prod.yaml \
+            --set image.tag=${{ github.sha }} \
+            --set canary.weight=25 \
+            --namespace production \
+            --wait
+
+      - name: Canary 25% - Monitor metrics (10 min)
+        run: |
+          echo "Waiting 10 minutes to observe canary metrics..."
+          sleep 600
+          # Check P95 latency
+          P95=$(curl -s "${{ secrets.GRAFANA_URL }}/api/ds/query" \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_TOKEN }}" \
+            -d '{"queries":[{"expr":"histogram_quantile(0.95,rate(http_request_duration_seconds_bucket{version=\"canary\"}[3m]))"}]}' | jq '.results[0].value[1]')
+          if (( $(echo "$P95 > 0.5" | bc -l) )); then
+            echo "ERROR: Canary P95 latency ${P95}s exceeds 500ms threshold"
+            exit 1
+          fi
+          echo "Canary 25% healthy: P95=${P95}s"
+
+      - name: Full Deployment - 100% traffic
+        run: |
+          helm upgrade --install nekocafe ./helm/ \
+            -f helm/values-prod.yaml \
+            --set image.tag=${{ github.sha }} \
+            --set canary.enabled=false \
+            --namespace production \
+            --wait
+          echo "Full deployment complete!"
+
+  auto-rollback:
+    runs-on: ubuntu-latest
+    needs: canary-deploy
+    if: failure()
+    steps:
+      - name: Rollback to previous stable version
+        run: |
+          echo "Rolling back to previous stable release..."
+          PREV_TAG=$(helm history nekocafe -n production --max=5 | grep "deployed" | tail -1 | awk '{print $1}')
+          helm rollback nekocafe $PREV_TAG -n production --wait
+          echo "Rollback complete to revision $PREV_TAG"

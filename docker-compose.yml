@@ -1,0 +1,106 @@
+# NekoCafe 本地开发环境一键启动
+# 班级：计算机233  姓名：刘俞靖  学号：231002501
+
+services:
+  reservation:
+    build:
+      context: services/reservation
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8081:8080"
+    environment:
+      - DATABASE_URL=postgresql://nekocafe:nekocafe@postgres:5432/reservation
+      - REDIS_URL=redis://redis:6379/0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  member:
+    build:
+      context: services/member
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8082:8080"
+    environment:
+      - DATABASE_URL=postgresql://nekocafe:nekocafe@postgres:5432/member
+      - REDIS_URL=redis://redis:6379/1
+      - JWT_SECRET=dev-secret-change-in-production
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nekocafe
+      POSTGRES_PASSWORD: nekocafe
+      POSTGRES_DB: nekocafe
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nekocafe"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-alpine
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: nekocafe
+      RABBITMQ_DEFAULT_PASS: nekocafe
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
