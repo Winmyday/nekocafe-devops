@@ -150,6 +150,8 @@ function maskPhone(phone) {
 }
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Member service starting on port ${PORT}`);
 });
+
+module.exports = server;
