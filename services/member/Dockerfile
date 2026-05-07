@@ -6,12 +6,12 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# Update OS packages and global npm to fix CVEs in bundled dependencies
-RUN apk upgrade --no-cache && npm install -g npm@latest
+# Update OS packages to fix CVEs in base image
+RUN apk upgrade --no-cache
 
 COPY package*.json ./
 RUN npm ci --omit=dev && \
-    npm install picomatch@4.0.4 cross-spawn@7.0.6 glob@10.5.0 minimatch@9.0.9 tar@7.5.11 --no-save
+    npm install picomatch@4.0.4 cross-spawn@7.0.6 glob@10.5.0 minimatch@9.0.9 --no-save
 
 # ===== Stage 2: Runtime =====
 FROM node:22-alpine AS runtime

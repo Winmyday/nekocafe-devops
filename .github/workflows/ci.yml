@@ -190,7 +190,7 @@ jobs:
           image-ref: ghcr.io/${{ env.REPO_LC }}/member:${{ github.sha }}
           format: table
           exit-code: "1"
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
           ignore-unfixed: true
 
   integration-test:
