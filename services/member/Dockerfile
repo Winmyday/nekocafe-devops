@@ -3,14 +3,14 @@
 # 班级：计算机233  姓名：刘俞靖  学号：231002501
 
 # ===== Stage 1: Build =====
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci --omit=dev
 
 # ===== Stage 2: Runtime =====
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 
 # Create non-root user
