@@ -3,8 +3,7 @@ name: CD
 # 班级：计算机233  姓名：刘俞靖  学号：231002501
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -15,6 +14,7 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     environment: staging
+    if: ${{ secrets.KUBE_CONFIG_STAGING != '' }}
     steps:
       - uses: actions/checkout@v4
 
