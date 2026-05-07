@@ -46,7 +46,7 @@ jobs:
       - name: Lint YAML (yamllint)
         run: |
           pip install yamllint
-          yamllint .github/workflows/ docker-compose.yml
+          yamllint -c .yamllint.yml .github/workflows/ docker-compose.yml
 
   unit-test:
     runs-on: ubuntu-latest
