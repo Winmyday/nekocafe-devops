@@ -7,7 +7,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm install picomatch@4.0.4 cross-spawn@7.0.6 glob@10.5.0 minimatch@9.0.9 --no-save
 
 # ===== Stage 2: Runtime =====
 FROM node:22-alpine AS runtime
