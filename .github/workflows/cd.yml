@@ -76,9 +76,11 @@ jobs:
           echo "Waiting 5 minutes to observe canary metrics..."
           sleep 300
           # Check error rate
+          PROMQL='rate(http_requests_total{version="canary",status_code=~"5.."}[2m])'
+          PROMQL="$PROMQL/rate(http_requests_total{version=\"canary\"}[2m])"
           ERROR_RATE=$(curl -s "${{ secrets.GRAFANA_URL }}/api/ds/query" \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_TOKEN }}" \
-            -d '{"queries":[{"expr":"rate(http_requests_total{version=\"canary\",status_code=~\"5..\"}[2m])/rate(http_requests_total{version=\"canary\"}[2m])"}]}' | jq '.results[0].value[1]')
+            -d "{\"queries\":[{\"expr\":\"$PROMQL\"}]}" | jq '.results[0].value[1]')
           if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
             echo "ERROR: Canary error rate $ERROR_RATE exceeds 1% threshold"
             exit 1
@@ -99,9 +101,12 @@ jobs:
           echo "Waiting 10 minutes to observe canary metrics..."
           sleep 600
           # Check P95 latency
+          PROMQL='histogram_quantile(0.95,'
+          PROMQL="$PROMQL""rate(http_request_duration_seconds_bucket"
+          PROMQL="$PROMQL""{version=\"canary\"}[3m]))"
           P95=$(curl -s "${{ secrets.GRAFANA_URL }}/api/ds/query" \
             -H "Authorization: Bearer ${{ secrets.GRAFANA_TOKEN }}" \
-            -d '{"queries":[{"expr":"histogram_quantile(0.95,rate(http_request_duration_seconds_bucket{version=\"canary\"}[3m]))"}]}' | jq '.results[0].value[1]')
+            -d "{\"queries\":[{\"expr\":\"$PROMQL\"}]}" | jq '.results[0].value[1]')
           if (( $(echo "$P95 > 0.5" | bc -l) )); then
             echo "ERROR: Canary P95 latency ${P95}s exceeds 500ms threshold"
             exit 1

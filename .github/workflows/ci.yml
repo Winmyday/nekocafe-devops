@@ -199,9 +199,12 @@ jobs:
           curl -s http://localhost:8081/healthz | grep ok
           curl -s http://localhost:8082/healthz | grep ok
           # Test: create reservation
+          BODY='{"store_id":"S001","table_id":"T001",'
+          BODY="$BODY""\"date\":\"2026-05-08\",\"slot_id\":\"lunch\","
+          BODY="$BODY""\"guest_count\":2}"
           curl -s -X POST http://localhost:8081/api/v1/reservations \
             -H "Content-Type: application/json" \
-            -d '{"store_id":"S001","table_id":"T001","date":"2026-05-08","slot_id":"lunch","guest_count":2}' | grep confirmed
+            -d "$BODY" | grep confirmed
 
       - name: Cleanup
         if: always()
