@@ -14,7 +14,6 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     environment: staging
-    if: ${{ secrets.KUBE_CONFIG_STAGING != '' }}
     steps:
       - uses: actions/checkout@v4
 
